@@ -229,4 +229,138 @@ app.post("/make-server-c2f27df0/verify", async (c) => {
   }
 });
 
+// Admin: Get all subscriptions
+app.get("/make-server-c2f27df0/admin/subscriptions", async (c) => {
+  try {
+    const { data: subscriptions, error } = await supabaseAdmin
+      .from('subscriptions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching subscriptions:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ success: true, subscriptions });
+  } catch (error) {
+    console.log('Admin subscriptions error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Get all receipts
+app.get("/make-server-c2f27df0/admin/receipts", async (c) => {
+  try {
+    const receiptKeys = await kv.getByPrefix('receipt:');
+    const receipts = receiptKeys.map((item: any) => item.value);
+
+    return c.json({ success: true, receipts });
+  } catch (error) {
+    console.log('Admin receipts error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Create subscription
+app.post("/make-server-c2f27df0/admin/create-subscription", async (c) => {
+  try {
+    const { email, plan, duration } = await c.req.json();
+
+    if (!plan || !duration) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+
+    // Generate activation code
+    const activationCode = `AC-${Math.random().toString(36).substring(2, 10).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+
+    // Calculate expiry date
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + parseInt(duration));
+
+    // Insert into subscriptions table
+    const { data, error } = await supabaseAdmin
+      .from('subscriptions')
+      .insert({
+        activation_code: activationCode,
+        plan: plan,
+        status: 'active',
+        expires_at: expiresAt.toISOString(),
+        user_email: email || null
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.log('Error creating subscription:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ 
+      success: true, 
+      subscription: data,
+      activation_code: activationCode
+    });
+  } catch (error) {
+    console.log('Create subscription error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Update receipt status
+app.post("/make-server-c2f27df0/admin/update-receipt", async (c) => {
+  try {
+    const { receiptId, status } = await c.req.json();
+
+    if (!receiptId || !status) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+
+    const receiptKey = `receipt:${receiptId}`;
+    const receipt = await kv.get(receiptKey);
+
+    if (!receipt) {
+      return c.json({ error: 'Receipt not found' }, 404);
+    }
+
+    // Update receipt status
+    await kv.set(receiptKey, {
+      ...receipt,
+      status: status,
+      updatedAt: new Date().toISOString()
+    });
+
+    // If approved, create a subscription
+    if (status === 'approved') {
+      const activationCode = `AC-${Math.random().toString(36).substring(2, 10).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+      
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30); // Default 30 days
+
+      await supabaseAdmin
+        .from('subscriptions')
+        .insert({
+          activation_code: activationCode,
+          plan: receipt.plan,
+          status: 'active',
+          expires_at: expiresAt.toISOString(),
+          user_email: receipt.userEmail
+        });
+
+      // Store activation code with receipt
+      await kv.set(receiptKey, {
+        ...receipt,
+        status: status,
+        activationCode: activationCode,
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    return c.json({ success: true });
+  } catch (error) {
+    console.log('Update receipt error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 Deno.serve(app.fetch);
