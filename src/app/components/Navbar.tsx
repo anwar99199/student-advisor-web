@@ -51,19 +51,22 @@ export function Navbar() {
             
             {isAuthenticated ? (
               <>
-                <div className="flex items-center gap-2 text-sm text-gray-700">
-                  <User className="h-4 w-4" />
-                  <span>{userName}</span>
+                <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-blue-50 rounded-lg">
+                  <User className="h-4 md:h-5 w-4 md:w-5 text-blue-600" />
+                  <span className="text-blue-900 font-medium text-sm md:text-base">
+                    مرحباً، {userName.split(' ')[0]}
+                  </span>
                 </div>
-                <Button variant="outline" onClick={handleLogout}>
+                <Button variant="outline" size="sm" onClick={handleLogout} className="md:size-default">
                   <LogOut className="h-4 w-4 ml-2" />
-                  تسجيل الخروج
+                  <span className="hidden sm:inline">تسجيل الخروج</span>
+                  <span className="sm:hidden">خروج</span>
                 </Button>
               </>
             ) : (
               <>
                 <Link to="/login">
-                  <Button variant="outline">تسجيل الدخول</Button>
+                  <Button variant="outline">ت��جيل الدخول</Button>
                 </Link>
                 <Link to="/register">
                   <Button>التسجيل</Button>

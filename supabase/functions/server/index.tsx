@@ -4,6 +4,7 @@ import { logger } from "npm:hono/logger";
 import * as kv from "./kv_store.tsx";
 import { signUp, verifyUser, supabaseAdmin } from "./auth.tsx";
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const app = new Hono();
 
@@ -37,6 +38,23 @@ app.post("/make-server-c2f27df0/signup", async (c) => {
     }
 
     const data = await signUp(email, password, name);
+    
+    // Add user to users table
+    const { error: dbError } = await supabaseAdmin
+      .from('users')
+      .insert({
+        auth_user_id: data.user.id,
+        email: email,
+        name: name,
+        subscription_plan: 'none',
+        subscription_status: 'none'
+      });
+
+    if (dbError) {
+      console.log('Error adding user to users table:', dbError);
+      // Don't fail the signup if this fails, just log it
+    }
+
     return c.json({ success: true, user: data });
   } catch (error) {
     console.log('Sign up error:', error);
@@ -262,6 +280,26 @@ app.get("/make-server-c2f27df0/admin/receipts", async (c) => {
   }
 });
 
+// Admin: Get all users
+app.get("/make-server-c2f27df0/admin/users", async (c) => {
+  try {
+    const { data: users, error } = await supabaseAdmin
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching users:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ success: true, users });
+  } catch (error) {
+    console.log('Admin users error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 // Admin: Create subscription
 app.post("/make-server-c2f27df0/admin/create-subscription", async (c) => {
   try {
@@ -359,6 +397,235 @@ app.post("/make-server-c2f27df0/admin/update-receipt", async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.log('Update receipt error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Update user subscription
+app.post("/make-server-c2f27df0/admin/update-user", async (c) => {
+  try {
+    const { userId, subscription_plan, subscription_status, activation_code } = await c.req.json();
+
+    if (!userId) {
+      return c.json({ error: 'Missing user ID' }, 400);
+    }
+
+    const updateData: any = {};
+    if (subscription_plan) updateData.subscription_plan = subscription_plan;
+    if (subscription_status) updateData.subscription_status = subscription_status;
+    if (activation_code !== undefined) updateData.activation_code = activation_code;
+
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update(updateData)
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.log('Error updating user:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ success: true, user: data });
+  } catch (error) {
+    console.log('Admin update user error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin Login
+app.post("/make-server-c2f27df0/admin/login", async (c) => {
+  try {
+    const { email, password } = await c.req.json();
+
+    if (!email || !password) {
+      return c.json({ error: 'Missing email or password' }, 400);
+    }
+
+    // Use pgcrypto to verify password directly in database
+    const { data: admin, error } = await supabaseAdmin
+      .rpc('verify_admin_login', {
+        admin_email: email,
+        admin_password: password
+      });
+
+    if (error || !admin || admin.length === 0) {
+      console.log('Admin login failed:', email, error);
+      return c.json({ error: 'بيانات الدخول غير صحيحة' }, 401);
+    }
+
+    const adminData = Array.isArray(admin) ? admin[0] : admin;
+
+    // Update last login
+    await supabaseAdmin
+      .from('admins')
+      .update({ last_login_at: new Date().toISOString() })
+      .eq('id', adminData.id);
+
+    // Return admin info (without password)
+    return c.json({
+      success: true,
+      admin: {
+        id: adminData.id,
+        email: adminData.email,
+        name: adminData.name,
+        role: adminData.role
+      }
+    });
+  } catch (error) {
+    console.log('Admin login error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Setup initial admins (one-time use)
+app.post("/make-server-c2f27df0/admin/setup", async (c) => {
+  try {
+    const { secret_key } = await c.req.json();
+
+    // Secret key for security (you can change this)
+    if (secret_key !== 'SETUP_ADMINS_2026') {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+
+    // Check if admins already exist
+    const { data: existingAdmins } = await supabaseAdmin
+      .from('admins')
+      .select('email');
+
+    if (existingAdmins && existingAdmins.length > 0) {
+      return c.json({ error: 'Admins already set up' }, 400);
+    }
+
+    // Admin 1: as8543245@gmail.com - A1999anw#
+    const hash1 = await bcrypt.hash('A1999anw#');
+    
+    // Admin 2: anwaralrawahi459@gmail.com - 6101999
+    const hash2 = await bcrypt.hash('6101999');
+
+    const adminsToInsert = [
+      {
+        email: 'as8543245@gmail.com',
+        password_hash: hash1,
+        name: 'المدير الأول',
+        role: 'super_admin',
+        is_active: true
+      },
+      {
+        email: 'anwaralrawahi459@gmail.com',
+        password_hash: hash2,
+        name: 'المدير الثاني',
+        role: 'admin',
+        is_active: true
+      }
+    ];
+
+    const { data, error } = await supabaseAdmin
+      .from('admins')
+      .insert(adminsToInsert)
+      .select();
+
+    if (error) {
+      console.log('Error setting up admins:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ 
+      success: true, 
+      message: 'Admins created successfully',
+      admins: data.map(a => ({ email: a.email, name: a.name, role: a.role }))
+    });
+  } catch (error) {
+    console.log('Admin setup error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Get all admins
+app.get("/make-server-c2f27df0/admin/admins", async (c) => {
+  try {
+    const { data: admins, error } = await supabaseAdmin
+      .from('admins')
+      .select('id, email, name, role, is_active, created_at, last_login_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.log('Error fetching admins:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ success: true, admins });
+  } catch (error) {
+    console.log('Get admins error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Create new admin
+app.post("/make-server-c2f27df0/admin/create-admin", async (c) => {
+  try {
+    const { email, password, name, role } = await c.req.json();
+
+    if (!email || !password || !name) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password);
+
+    const { data, error } = await supabaseAdmin
+      .from('admins')
+      .insert({
+        email,
+        password_hash: passwordHash,
+        name,
+        role: role || 'admin',
+        is_active: true
+      })
+      .select('id, email, name, role, is_active')
+      .single();
+
+    if (error) {
+      console.log('Error creating admin:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ success: true, admin: data });
+  } catch (error) {
+    console.log('Create admin error:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Admin: Update admin status
+app.post("/make-server-c2f27df0/admin/update-admin", async (c) => {
+  try {
+    const { adminId, is_active, role } = await c.req.json();
+
+    if (!adminId) {
+      return c.json({ error: 'Missing admin ID' }, 400);
+    }
+
+    const updateData: any = {};
+    if (is_active !== undefined) updateData.is_active = is_active;
+    if (role) updateData.role = role;
+
+    const { data, error } = await supabaseAdmin
+      .from('admins')
+      .update(updateData)
+      .eq('id', adminId)
+      .select('id, email, name, role, is_active')
+      .single();
+
+    if (error) {
+      console.log('Error updating admin:', error);
+      return c.json({ error: error.message }, 400);
+    }
+
+    return c.json({ success: true, admin: data });
+  } catch (error) {
+    console.log('Update admin error:', error);
     return c.json({ error: error.message }, 500);
   }
 });

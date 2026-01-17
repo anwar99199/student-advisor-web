@@ -51,11 +51,24 @@ interface Stats {
   totalUsers: number;
 }
 
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  subscription_plan: string;
+  subscription_status: string;
+  activation_code?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export function AdminDashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<Stats>({
     totalSubscriptions: 0,
     activeSubscriptions: 0,
@@ -63,6 +76,7 @@ export function AdminDashboard() {
     totalUsers: 0
   });
   const [searchCode, setSearchCode] = useState('');
+  const [searchEmail, setSearchEmail] = useState('');
 
   // New subscription form
   const [newSub, setNewSub] = useState({
@@ -87,7 +101,8 @@ export function AdminDashboard() {
     try {
       await Promise.all([
         loadSubscriptions(),
-        loadReceipts()
+        loadReceipts(),
+        loadUsers()
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -150,6 +165,32 @@ export function AdminDashboard() {
       }));
     } catch (error) {
       console.error('Error loading receipts:', error);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-c2f27df0/admin/users`,
+        {
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) throw new Error('Failed to load users');
+
+      const data = await response.json();
+      setUsers(data.users || []);
+      
+      setStats(prev => ({
+        ...prev,
+        totalUsers: data.users?.length || 0
+      }));
+    } catch (error) {
+      console.error('Error loading users:', error);
     }
   };
 
@@ -234,6 +275,10 @@ export function AdminDashboard() {
     ? subscriptions.filter(s => s.activation_code.includes(searchCode))
     : subscriptions;
 
+  const filteredUsers = searchEmail
+    ? users.filter(u => u.email.includes(searchEmail))
+    : users;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8 px-4">
       <div className="max-w-7xl mx-auto">
@@ -297,8 +342,9 @@ export function AdminDashboard() {
 
         {/* Main Content */}
         <Tabs defaultValue="subscriptions" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="subscriptions">الاشتراكات</TabsTrigger>
+            <TabsTrigger value="users">المستخدمين</TabsTrigger>
             <TabsTrigger value="receipts">الإيصالات</TabsTrigger>
             <TabsTrigger value="create">إنشاء اشتراك</TabsTrigger>
           </TabsList>
@@ -351,6 +397,69 @@ export function AdminDashboard() {
                               <td className="p-3">{getStatusBadge(sub.status)}</td>
                               <td className="p-3">{new Date(sub.expires_at).toLocaleDateString('ar-SA')}</td>
                               <td className="p-3">{new Date(sub.created_at).toLocaleDateString('ar-SA')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Users Tab */}
+          <TabsContent value="users" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>إدارة المستخدمين</CardTitle>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="بحث بالبريد الإلكتروني..."
+                      value={searchEmail}
+                      onChange={(e) => setSearchEmail(e.target.value)}
+                      className="w-64"
+                      dir="ltr"
+                    />
+                    <Button onClick={loadUsers} variant="outline">
+                      <Search className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {filteredUsers.length === 0 ? (
+                    <Alert>
+                      <AlertDescription>لا توجد مستخدمين حالياً</AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-right p-3">الاسم</th>
+                            <th className="text-right p-3">البريد الإلكتروني</th>
+                            <th className="text-right p-3">الهاتف</th>
+                            <th className="text-right p-3">الباقة</th>
+                            <th className="text-right p-3">الحالة</th>
+                            <th className="text-right p-3">كود التفعيل</th>
+                            <th className="text-right p-3">تاريخ الإنشاء</th>
+                            <th className="text-right p-3">تاريخ التحديث</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredUsers.map((user) => (
+                            <tr key={user.id} className="border-b hover:bg-gray-50">
+                              <td className="p-3">{user.name}</td>
+                              <td className="p-3" dir="ltr">{user.email}</td>
+                              <td className="p-3" dir="ltr">{user.phone || '-'}</td>
+                              <td className="p-3">{user.subscription_plan}</td>
+                              <td className="p-3">{getStatusBadge(user.subscription_status)}</td>
+                              <td className="p-3 font-mono text-sm" dir="ltr">{user.activation_code || '-'}</td>
+                              <td className="p-3">{new Date(user.created_at).toLocaleDateString('ar-SA')}</td>
+                              <td className="p-3">{new Date(user.updated_at).toLocaleDateString('ar-SA')}</td>
                             </tr>
                           ))}
                         </tbody>

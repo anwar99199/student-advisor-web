@@ -7,6 +7,7 @@ import { Label } from '@/app/components/ui/label';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { ShieldCheck, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 export function AdminLoginPage() {
   const [email, setEmail] = useState('');
@@ -15,30 +16,37 @@ export function AdminLoginPage() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const ADMIN_CREDENTIALS = [
-    { email: 'as8543245@gmail.com', password: 'A1999anw#' },
-    { email: 'anwaralrawahi459@gmail.com', password: '6101999' }
-  ];
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      // Check if credentials match admin accounts
-      const isAdmin = ADMIN_CREDENTIALS.some(
-        admin => admin.email === email && admin.password === password
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-c2f27df0/admin/login`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        }
       );
 
-      if (!isAdmin) {
-        setError('بيانات الدخول غير صحيحة أو أنك لست مديراً');
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'بيانات الدخول غير صحيحة');
         setLoading(false);
         return;
       }
 
       // Store admin session
-      localStorage.setItem('adminEmail', email);
+      localStorage.setItem('adminEmail', data.admin.email);
+      localStorage.setItem('adminName', data.admin.name);
+      localStorage.setItem('adminRole', data.admin.role);
+      localStorage.setItem('adminId', data.admin.id);
       localStorage.setItem('isAdmin', 'true');
       localStorage.setItem('adminLoginTime', new Date().toISOString());
 
