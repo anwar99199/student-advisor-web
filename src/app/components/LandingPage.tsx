@@ -95,6 +95,24 @@ export function LandingPage() {
           </Link>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-8">
+        <div className="container mx-auto px-4 text-center">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-6 mb-4">
+            <Link to="/privacy-policy" className="text-gray-300 hover:text-white transition-colors">
+              سياسة الخصوصية
+            </Link>
+            <span className="hidden md:inline text-gray-600">|</span>
+            <a href="mailto:as8543245@gmail.com" className="text-gray-300 hover:text-white transition-colors">
+              اتصل بنا
+            </a>
+          </div>
+          <p className="text-gray-400 text-sm">
+            © {new Date().getFullYear()} مستشار الطالب الجامعي. جميع الحقوق محفوظة.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }

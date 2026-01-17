@@ -4,6 +4,7 @@ import { LandingPage } from '@/app/components/LandingPage';
 import { LoginPage } from '@/app/components/LoginPage';
 import { PricingPage } from '@/app/components/PricingPage';
 import { UploadReceiptPage } from '@/app/components/UploadReceiptPage';
+import { PrivacyPolicyPage } from '@/app/components/PrivacyPolicyPage';
 import { Toaster } from '@/app/components/ui/sonner';
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/register" element={<LoginPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/upload-receipt" element={<UploadReceiptPage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
         </Routes>
         <Toaster position="top-center" />
       </div>
