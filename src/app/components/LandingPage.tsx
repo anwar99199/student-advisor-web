@@ -109,7 +109,7 @@ export function LandingPage() {
             </a>
           </div>
           <p className="text-gray-400 text-sm">
-            © {new Date().getFullYear()} مستشار الطالب الجامعي. جميع الحقوق محفوظة.
+            © {new Date().getFullYear()} مستشار الطالب الجامعي. جميع الحقوق محفوظة<Link to="/admin/login" className="text-gray-900 hover:text-gray-700 transition-colors mx-1">.</Link>
           </p>
         </div>
       </footer>
